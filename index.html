@@ -231,50 +231,29 @@
         // --- Event Listeners ---
        btnStart.addEventListener('click', function (event) {event.preventDefault();
        console.log('Botão iniciar pressionado'); async function startTracking(isResuming = false) {
-  console.log('Iniciando rastreamento...');
-
-  if (!navigator.geolocation) {
-    showCustomAlert(
-      'Erro',
-      'Este navegador não oferece suporte à localização.'
-    );
-    return;
-  }
-
-  if (!isResuming) {
-    totalDistanceKm = 0;
+  console.log('Iniciando rastreamento...');if (!navigator.geolocation) {
+    showCustomAlert('Erro','Este navegador não oferece suporte à localização.');return;}
+  if (!isResuming) {totalDistanceKm = 0;
     lastPosition = null;
     displayDistance.textContent = '0.00';
-    updateCost();
-  }
+    updateCost();}
 
   isTracking = true;
   updateUI();
 
-  try {
-    if ('wakeLock' in navigator && !isResuming) {
-      await requestWakeLock();
-    }
-  } catch (error) {
-    console.warn('Wake Lock não disponível:', error);
-  }
+  try {if ('wakeLock' in navigator && !isResuming) {await requestWakeLock();}} catch (error) 
+  {console.warn('Wake Lock não disponível:', error);}
 
   showToast('Solicitando acesso à localização...');
 
   watchId = navigator.geolocation.watchPosition(
     successPosition,
     errorPosition,
-    {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 5000
-    }
-  );
+    {enableHighAccuracy: true,timeout: 15000,maximumAge: 5000});
 
   saveActiveState();
 
-  showToast('Viagem iniciada. Aguardando sinal do GPS...');
-}
+  showToast('Viagem iniciada. Aguardando sinal do GPS...');}
        btnStop.addEventListener('click', function (event) {event.preventDefault();
        stopTracking();});
         inputPrice.addEventListener('input', () => { updateCost(); saveSettings(); });
@@ -282,10 +261,7 @@
         
         // Auto Wake Lock on any touch if needed (Browser Security Requirement)
         document.addEventListener('click', () => {
-            if (isTracking && wakeLock === null) {
-                requestWakeLock().catch(e => console.log("Wake lock tap ignored"));
-            }
-        });
+            if (isTracking && wakeLock === null) {requestWakeLock().catch(e => console.log("Wake lock tap ignored"));}});
 
         // Modal Listeners
         btnCloseAlert.addEventListener('click', () => alertModal.classList.add('hidden'));
