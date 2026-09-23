@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rastreador de Combustível e Distância</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f3f4f6;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* Smooth transitions for interactive elements */
+        .btn-transition {
+            transition: all 0.2s ease-in-out;
+        }
+        
+        /* Modal animation */
+        .modal-enter {
+            opacity: 0;
+            transform: scale(0.9);
+        }
+        .modal-enter-active {
+            opacity: 1;
+            transform: scale(1);
+            transition: opacity 300ms, transform 300ms;
+        }
+        
+        /* Map container styling */
+        #map-container {
+            width: 100%;
+            height: 200px;
+            background-color: #e5e7eb;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #6b7280;
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .pulse {
+            animation: pulse-animation 2s infinite;
+        }
+
+        @keyframes pulse-animation {
+            0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+    </style>
+</head>
+<body class="text-gray-800 antialiased h-screen flex flex-col">
+
+    <header class="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-10">
+        <div class="max-w-md mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i class="fa-solid fa-car-side"></i> AutoTrack
+            </h1>
+            <button id="btn-history" class="p-2 bg-blue-700 rounded-full hover:bg-blue-800 focus:outline-none btn-transition" aria-label="Histórico de Viagens">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-grow flex justify-center p-4 overflow-y-auto">
+        <div class="w-full max-w-md flex flex-col gap-4">
+            
+            <!-- Dashboard Card -->
+            <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-gray-700">Viagem Atual</h2>
+                    <span id="status-badge" class="px-3 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded-full">Parado</span>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-blue-50 p-4 rounded-lg flex flex-col justify-center items-center">
+                        <span class="text-blue-500 text-sm font-medium mb-1">Distância</span>
+                        <div class="flex items-baseline gap-1">
+                            <span id="display-distance" class="text-3xl font-bold text-gray-800">0.00</span>
+                            <span class="text-gray-500 text-sm font-semibold">km</span>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-green-50 p-4 rounded-lg flex flex-col justify-center items-center">
+                        <span class="text-green-600 text-sm font-medium mb-1">Custo Estimado</span>
+                        <div class="flex items-baseline gap-1">
+                            <span class="text-gray-500 text-sm font-semibold">R$</span>
+                            <span id="display-cost" class="text-3xl font-bold text-gray-800">0.00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-3">
+                    <button id="btn-start" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-xl shadow-md btn-transition flex items-center justify-center gap-2 text-lg">
+                        <i class="fa-solid fa-play"></i> Iniciar Viagem
+                    </button>
+                    <button id="btn-stop" class="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-4 px-4 rounded-xl shadow-md btn-transition hidden items-center justify-center gap-2 text-lg">
+                        <i class="fa-solid fa-stop"></i> Encerrar Viagem
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+                <h2 class="text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-gas-pump text-gray-400"></i> Configurações do Veículo
+                </h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label for="price-per-liter" class="block text-sm font-medium text-gray-700 mb-1">Preço do Combustível (R$/Litro)</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <span class="text-gray-500 sm:text-sm">R$</span>
+                            </div>
+                            <input type="number" id="price-per-liter" value="5.80" step="0.01" min="0.1" class="pl-10 block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm py-3 px-4 border bg-gray-50" placeholder="Ex: 5.80">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="consumption" class="block text-sm font-medium text-gray-700 mb-1">Consumo Médio (km/l)</label>
+                        <div class="relative">
+                            <input type="number" id="consumption" value="10.0" step="0.1" min="1" class="block w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm py-3 px-4 border bg-gray-50 pr-12" placeholder="Ex: 10">
+                            <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                <span class="text-gray-500 sm:text-sm">km/l</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <p class="text-xs text-gray-400 text-center mt-4">
+                Dica: O rastreamento funciona melhor com a tela ativa.
+            </p>
+        </div>
+    </main>
+
+    <!-- Custom Modal for Alerts -->
+    <div id="alert-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-lg max-w-sm w-full p-6 transform transition-all">
+            <h3 id="alert-title" class="text-lg font-bold text-gray-900 mb-2">Aviso</h3>
+            <p id="alert-message" class="text-gray-600 mb-6"></p>
+            <div id="alert-actions" class="flex justify-end gap-3">
+                <button id="btn-close-alert" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg btn-transition">
+                    Entendi
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div id="history-modal" class="fixed inset-0 bg-gray-50 z-40 hidden flex-col">
+        <div class="bg-blue-600 text-white p-4 flex justify-between items-center">
+            <h2 class="text-xl font-bold flex items-center gap-2">
+                <i class="fa-solid fa-list"></i> Histórico
+            </h2>
+            <button id="btn-close-history" class="p-2 bg-blue-700 rounded-full hover:bg-blue-800 focus:outline-none btn-transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        
+        <div class="bg-blue-600 px-4 pb-6 pt-2 text-white shadow-md mb-2">
+            <div class="flex justify-between items-center bg-blue-700/50 p-4 rounded-xl backdrop-blur-sm border border-blue-500/30">
+                <div>
+                    <p class="text-blue-100 text-xs font-medium uppercase tracking-wider mb-1">Distância Total</p>
+                    <div class="flex items-baseline gap-1">
+                        <span id="total-history-distance" class="text-2xl font-bold">0.00</span>
+                        <span class="text-blue-200 text-sm">km</span>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="text-blue-100 text-xs font-medium uppercase tracking-wider mb-1">Custo Total</p>
+                    <div class="flex items-baseline gap-1 justify-end">
+                        <span class="text-blue-200 text-sm">R$</span>
+                        <span id="total-history-cost" class="text-2xl font-bold">0.00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-4 overflow-y-auto flex-grow">
+            <div id="history-list" class="flex flex-col gap-3">
+                <!-- History items will be injected here -->
+                <p class="text-gray-500 text-center py-10">Nenhuma viagem registrada ainda.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-lg transition-opacity duration-300 opacity-0 pointer-events-none z-50 text-sm font-medium text-center w-max max-w-[90%]">
+    </div>
+
+    <script>
+        // --- State Variables ---
+        let isTracking = false;
+        let watchId = null;
+        let totalDistanceKm = 0;
+        let lastPosition = null;
+        let trips = JSON.parse(localStorage.getItem('autotrack_trips')) || [];
+        const ACTIVE_TRIP_KEY = 'autotrack_active_trip';
+
+        // --- DOM Elements ---
+        const btnStart = document.getElementById('btn-start');
+        const btnStop = document.getElementById('btn-stop');
+        const displayDistance = document.getElementById('display-distance');
+        const displayCost = document.getElementById('display-cost');
+        const statusBadge = document.getElementById('status-badge');
+        
+        const inputPrice = document.getElementById('price-per-liter');
+        const inputConsumption = document.getElementById('consumption');
+        
+        const alertModal = document.getElementById('alert-modal');
+        const alertTitle = document.getElementById('alert-title');
+        const alertMessage = document.getElementById('alert-message');
+        const btnCloseAlert = document.getElementById('btn-close-alert');
+        
+        const historyModal = document.getElementById('history-modal');
+        const btnHistory = document.getElementById('btn-history');
+        const btnCloseHistory = document.getElementById('btn-close-history');
+        const historyList = document.getElementById('history-list');
+
+        // Wake Lock Variable
+        let wakeLock = null;
+
+        // --- Event Listeners ---
+        btnStart.addEventListener('click', () => startTracking(false));
+        btnStop.addEventListener('click', stopTracking);
+        inputPrice.addEventListener('input', () => { updateCost(); saveSettings(); });
+        inputConsumption.addEventListener('input', () => { updateCost(); saveSettings(); });
+        
+        // Auto Wake Lock on any touch if needed (Browser Security Requirement)
+        document.addEventListener('click', () => {
+            if (isTracking && wakeLock === null) {
+                requestWakeLock().catch(e => console.log("Wake lock tap ignored"));
+            }
+        });
+
+        // Modal Listeners
+        btnCloseAlert.addEventListener('click', () => alertModal.classList.add('hidden'));
+        btnHistory.addEventListener('click', openHistory);
+        btnCloseHistory.addEventListener('click', () => historyModal.classList.add('hidden'));
+
+        // --- Core Functions ---
+
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    wakeLock.addEventListener('release', () => {
+                        console.log('Screen Wake Lock released');
+                    });
+                    console.log('Screen Wake Lock acquired');
+                } else {
+                    console.warn('Wake Lock API not supported in this browser.');
+                }
+            } catch (err) {
+                console.error(`Wake Lock Error: ${err.name}, ${err.message}`);
+                throw err; // Re-throw to handle UI feedback
+            }
+        }
+
+        function releaseWakeLock() {
+            if (wakeLock !== null) {
+                wakeLock.release()
+                    .then(() => {
+                        wakeLock = null;
+                    });
+            }
+        }
+
+        // Handle visibility changes to re-acquire wake lock if necessary
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible') {
+                await requestWakeLock().catch(e => console.log("Vis lock err"));
+            }
+        });
+
+        function saveActiveState() {
+            if (isTracking) {
+                localStorage.setItem(ACTIVE_TRIP_KEY, JSON.stringify({
+                    isTracking: true,
+                    totalDistanceKm: totalDistanceKm,
+                    lastPosition: lastPosition
+                }));
+            } else {
+                localStorage.removeItem(ACTIVE_TRIP_KEY);
+            }
+        }
+
+        function saveSettings() {
+            localStorage.setItem('autotrack_settings', JSON.stringify({
+                price: inputPrice.value,
+                consumption: inputConsumption.value
+            }));
+        }
+
+        function loadSettings() {
+            const settings = JSON.parse(localStorage.getItem('autotrack_settings'));
+            if (settings) {
+                inputPrice.value = settings.price;
+                inputConsumption.value = settings.consumption;
+            }
+        }
+
+        function showToast(message, duration = 4000) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.remove('opacity-0');
+            toast.classList.add('opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0');
+            }, duration);
+        }
+
+        async function startTracking(isResuming = false) {
+            if (!("geolocation" in navigator)) {
+                showCustomAlert("Erro", "Geolocalização não é suportada pelo seu navegador.");
+                return;
+            }
+
+            // Tenta verificar o status da permissão antes, se o navegador suportar a Permissions API
+            try {
+                if (navigator.permissions && navigator.permissions.query) {
+                    const result = await navigator.permissions.query({ name: 'geolocation' });
+                    if (result.state === 'denied') {
+                        showLocationPermissionHelp();
+                        return; // Interrompe antes de tentar usar o GPS
+                    }
+                }
+            } catch (e) {
+                console.log("Permissions API not supported or failed, falling back to direct request.");
+            }
+
+            isTracking = true;
+            if (!isResuming) {
+                totalDistanceKm = 0;
+                lastPosition = null;
+            }
+            
+            updateUI();
+            
+            // Request to keep the screen on. If auto-started, it might fail asking for user touch.
+            requestWakeLock().catch(err => {
+                if (err.name === 'NotAllowedError') {
+                    showToast("⚠️ Toque na tela para mantê-la acesa durante a viagem.", 7000);
+                }
+            });
+
+            // Options for high accuracy
+            const options = {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            };
+
+            watchId = navigator.geolocation.watchPosition(
+                successPosition,
+                errorPosition,
+                options
+            );
+            
+            saveActiveState();
+        }
+
+        function stopTracking() {
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            isTracking = false;
+            saveActiveState(); // clears the active trip
+            
+            // Release the wake lock so the screen can turn off normally
+            releaseWakeLock();
+            
+            if (totalDistanceKm > 0) {
+                saveTrip();
+                showAlert("Viagem Encerrada", `Você percorreu ${totalDistanceKm.toFixed(2)} km. Custo estimado: R$ ${calculateCost().toFixed(2)}`);
+            } else {
+                showToast("Viagem encerrada (Nenhuma distância percorrida).");
+            }
+            
+            updateUI();
+        }
+
+        function successPosition(position) {
+            const currentPosition = {
+                lat: position.coords.latitude,
+                lon: position.coords.longitude
+            };
+
+            if (lastPosition) {
+                const dist = calculateDistance(
+                    lastPosition.lat, lastPosition.lon,
+                    currentPosition.lat, currentPosition.lon
+                );
+                
+                // Only count significant movements (e.g., more than 5 meters)
+                // This prevents "GPS drift" while stationary from adding phantom distance
+                if (dist > 0.005) {
+                    totalDistanceKm += dist;
+                    displayDistance.textContent = totalDistanceKm.toFixed(2);
+                    updateCost();
+                }
+            }
+            lastPosition = currentPosition;
+            saveActiveState(); // Save to localStorage on every move to survive reloads
+        }
+
+        function errorPosition(error) {
+            console.warn(`ERROR(${error.code}): ${error.message}`);
+            
+            stopTrackingSilently(); // Para de rastrear sem exibir o alerta de viagem encerrada
+            
+            if (error.code === 1) { // PERMISSION_DENIED
+                showLocationPermissionHelp();
+            } else if (error.code === 2) { // POSITION_UNAVAILABLE
+                showCustomAlert("Sinal de GPS Fraco", "Não foi possível obter sua localização. Tente ir para um local mais aberto.");
+            } else if (error.code === 3) { // TIMEOUT
+                showCustomAlert("Tempo Esgotado", "Demorou muito para encontrar o sinal de GPS. Verifique sua conexão e tente novamente.");
+            }
+        }
+
+        // Função auxiliar para parar silenciosamente em caso de erro
+        function stopTrackingSilently() {
+             if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            isTracking = false;
+            saveActiveState();
+            releaseWakeLock();
+            updateUI();
+        }
+
+        function showLocationPermissionHelp() {
+            // Verifica se é iOS (Safari/In-App) de forma básica para dar a instrução correta
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            
+            let helpText = "O acesso à sua localização está bloqueado.<br><br>";
+            
+            if (isIOS) {
+                helpText += "<strong>Para resolver no iPhone:</strong><br>" +
+                            "1. Abra o app <strong>Ajustes</strong> do iPhone.<br>" +
+                            "2. Vá em <strong>Privacidade e Segurança</strong> > <strong>Serviços de Localização</strong>.<br>" +
+                            "3. Encontre o <strong>Safari</strong> (ou seu navegador atual) e mude para <strong>'Durante o Uso'</strong>.<br>" +
+                            "4. Volte aqui e recarregue a página.";
+            } else {
+                 helpText += "<strong>Como resolver:</strong><br>" +
+                            "Toque no ícone de cadeado ou 'aA' na barra de endereço (onde fica o nome do site), vá em configurações/permissões e permita o acesso ao <strong>Local/GPS</strong>. Depois recarregue a página.";
+            }
+            
+            // Usamos innerHTML aqui para permitir a formatação com <br> e <strong>
+            document.getElementById('alert-message').innerHTML = helpText;
+            document.getElementById('alert-title').textContent = "Permissão Necessária";
+            
+            // Adiciona um botão de recarregar para facilitar após o usuário mudar a configuração
+            const actionsDiv = document.getElementById('alert-actions');
+            actionsDiv.innerHTML = `
+                <button onclick="window.location.reload()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg btn-transition">
+                    Recarregar Página
+                </button>
+                <button id="btn-close-alert-dynamic" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg btn-transition">
+                    Fechar
+                </button>
+            `;
+            
+            // Re-liga o evento de fechar pro novo botão dinâmico
+            document.getElementById('btn-close-alert-dynamic').addEventListener('click', () => alertModal.classList.add('hidden'));
+            
+            alertModal.classList.remove('hidden');
+        }
+
+        // Haversine formula to calculate distance between two coordinates in km
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Radius of the earth in km
+            const dLat = deg2rad(lat2 - lat1);
+            const dLon = deg2rad(lon2 - lon1);
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const d = R * c; // Distance in km
+            return d;
+        }
+
+        function showCustomAlert(title, message) {
+            alertTitle.textContent = title;
+            alertMessage.innerHTML = message; // Change to innerHTML in case we pass HTML
+            
+            // Reset botões para o padrão (apenas fechar)
+            const actionsDiv = document.getElementById('alert-actions');
+            actionsDiv.innerHTML = `
+                 <button id="btn-close-alert-standard" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg btn-transition">
+                    Entendi
+                </button>
+            `;
+            document.getElementById('btn-close-alert-standard').addEventListener('click', () => alertModal.classList.add('hidden'));
+            
+            alertModal.classList.remove('hidden');
+        }
+
+        function saveTrip() {
+            const trip = {
+                id: Date.now(),
+                date: new Date().toLocaleString('pt-BR'),
+                distance: totalDistanceKm.toFixed(2),
+                cost: calculateCost().toFixed(2),
+                price: parseFloat(inputPrice.value).toFixed(2),
+                consumption: parseFloat(inputConsumption.value).toFixed(1)
+            };
+            
+            trips.unshift(trip); // Add to beginning of array
+            // Keep only last 50 trips to save space
+            if (trips.length > 50) trips.pop(); 
+            
+            localStorage.setItem('autotrack_trips', JSON.stringify(trips));
+        }
+
+        function openHistory() {
+            historyList.innerHTML = '';
+            
+            let accumulatedDistance = 0;
+            let accumulatedCost = 0;
+            
+            if (trips.length === 0) {
+                historyList.innerHTML = '<p class="text-gray-500 text-center py-10">Nenhuma viagem registrada ainda.</p>';
+            } else {
+                trips.forEach(trip => {
+                    accumulatedDistance += parseFloat(trip.distance);
+                    accumulatedCost += parseFloat(trip.cost);
+
+                    const card = document.createElement('div');
+                    card.className = 'bg-white p-4 rounded-xl border border-gray-200 shadow-sm';
+                    card.innerHTML = `
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-xs font-semibold text-gray-500"><i class="fa-regular fa-calendar"></i> ${trip.date}</span>
+                            <span class="font-bold text-green-600">R$ ${trip.cost}</span>
+                        </div>
+                        <div class="flex justify-between items-end">
+                            <div class="text-2xl font-bold text-gray-800">${trip.distance} <span class="text-sm font-normal text-gray-500">km</span></div>
+                            <div class="text-xs text-gray-400 text-right">
+                                R$${trip.price}/L • ${trip.consumption}km/l
+                            </div>
+                        </div>
+                    `;
+                    historyList.appendChild(card);
+                });
+            }
+            
+            document.getElementById('total-history-distance').textContent = accumulatedDistance.toFixed(2);
+            document.getElementById('total-history-cost').textContent = accumulatedCost.toFixed(2);
+            
+            historyModal.classList.remove('hidden');
+            historyModal.classList.add('flex');
+        }
+
+        function initApp() {
+            loadSettings();
+            
+            // Restore active session if Safari was closed/refreshed during a trip
+            const activeTripJson = localStorage.getItem(ACTIVE_TRIP_KEY);
+            if (activeTripJson) {
+                const activeTrip = JSON.parse(activeTripJson);
+                if (activeTrip.isTracking) {
+                    isTracking = true;
+                    totalDistanceKm = activeTrip.totalDistanceKm || 0;
+                    lastPosition = activeTrip.lastPosition || null;
+                }
+            }
+
+            // Check URL parameters for Auto-Start or Auto-Stop
+            const urlParams = new URLSearchParams(window.location.search);
+            const autoAction = urlParams.get('auto');
+
+            if (autoAction === 'start') {
+                startTracking(false);
+                cleanUrl();
+            } else if (autoAction === 'stop') {
+                if (isTracking) {
+                    stopTracking();
+                }
+                cleanUrl();
+            } else if (isTracking) {
+                // Resume silent tracking if page was just refreshed normally
+                startTracking(true);
+            }
+            
+            updateUI();
+            updateCost();
+            if(totalDistanceKm > 0) {
+                displayDistance.textContent = totalDistanceKm.toFixed(2);
+            }
+        }
+
+        function cleanUrl() {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('auto');
+            window.history.replaceState({}, document.title, url.pathname + url.search);
+        }
+
+        // Initialize UI on load
+        initApp();
+
+    </script>
+</body>
+</html>
