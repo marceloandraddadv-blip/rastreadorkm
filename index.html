@@ -229,7 +229,7 @@
         let wakeLock = null;
 
         // --- Event Listeners ---
-        btnStart.addEventListener('click', () => startTracking(false));
+        btnStart.addEventListener('click', () => {alert('O botão está funcionando');});
         btnStop.addEventListener('click', stopTracking);
         inputPrice.addEventListener('input', () => { updateCost(); saveSettings(); });
         inputConsumption.addEventListener('input', () => { updateCost(); saveSettings(); });
